@@ -616,6 +616,14 @@ def buildbot():
 def travis():
     logger = g.logger.getChild('travis')
 
+    info = json.loads(request.forms.payload)
+
+    try:
+        state, repo_label = find_state(info['commit'])
+    except ValueError:
+        lazy_debug(logger, lambda: 'Invalid commit ID from Travis: {}'.format(info['commit']))
+        return 'OK'
+
     repo_cfg = g.repo_cfgs[repo_label]
     travis_base_url = repo_cfg['travis'].get('url', 'https://api.travis-ci.org')
 
@@ -633,15 +641,7 @@ def travis():
         logger.warn('invalid signature on travis webhook')
         abort(400, 'Authorization failed')
 
-    info = json.loads(request.forms.payload)
-
     lazy_debug(logger, lambda: 'info: {}'.format(utils.remove_url_keys_from_json(info)))
-
-    try:
-        state, repo_label = find_state(info['commit'])
-    except ValueError:
-        lazy_debug(logger, lambda: 'Invalid commit ID from Travis: {}'.format(info['commit']))
-        return 'OK'
 
     lazy_debug(logger, lambda: 'state: {}, {}'.format(state, state.build_res_summary()))
 
