@@ -15,6 +15,8 @@ import sys
 import os
 import traceback
 from retrying import retry
+from OpenSSL.crypto import verify, load_publickey, FILETYPE_PEM, X509
+import base64
 
 import bottle
 bottle.BaseRequest.MEMFILE_MAX = 1024 * 1024 * 10
@@ -614,6 +616,20 @@ def buildbot():
 def travis():
     logger = g.logger.getChild('travis')
 
+    travis_config = requests.get('https://api.travis-ci.org/config').json()
+    travis_public_key = travis_config['config']['notifications']['webhook']['public_key']
+
+    pkey_public_key = load_publickey(FILETYPE_PEM, travis_public_key)
+    certificate = X509()
+    certificate.set_pubkey(pkey_public_key)
+
+    signature_header = request.headers['Signature']
+    signature = base64.b64decode(signature)
+
+    if not verify(certificate, signature, request.forms.payload, str('sha1')):
+        logger.warn('invalid signature on travis webhook')
+        abort(400, 'Authorization failed')
+
     info = json.loads(request.forms.payload)
 
     lazy_debug(logger, lambda: 'info: {}'.format(utils.remove_url_keys_from_json(info)))
@@ -629,20 +645,6 @@ def travis():
     if 'travis' not in state.build_res:
         lazy_debug(logger, lambda: 'travis is not a monitored target for {}'.format(state))
         return 'OK'
-
-    repo_cfg = g.repo_cfgs[repo_label]
-    token = repo_cfg['travis']['token']
-    auth_header = request.headers['Authorization']
-    code = hashlib.sha256(('{}/{}{}'.format(state.owner, state.name, token)).encode('utf-8')).hexdigest()
-    if auth_header != code:
-        # this isn't necessarily an error, e.g. maybe someone is
-        # fabricating travis notifications to try to trick Homu, but,
-        # I imagine that this will most often occur because a repo is
-        # misconfigured.
-        logger.warn('authorization failed for {}, maybe the repo has the wrong travis token? '
-                    'header = {}, computed = {}'
-                    .format(state, auth_header, code))
-        abort(400, 'Authorization failed')
 
     succ = info['result'] == 0
 
