@@ -616,15 +616,18 @@ def buildbot():
 def travis():
     logger = g.logger.getChild('travis')
 
-    travis_config = requests.get('https://api.travis-ci.org/config').json()
-    travis_public_key = travis_config['config']['notifications']['webhook']['public_key']
+    repo_cfg = g.repo_cfgs[repo_label]
+    travis_base_url = repo_cfg['travis'].get('url', 'https://api.travis-ci.org')
+
+    travis_config_page = requests.get(travis_base_url + '/config').json()
+    travis_public_key = travis_config_page['config']['notifications']['webhook']['public_key']
 
     pkey_public_key = load_publickey(FILETYPE_PEM, travis_public_key)
     certificate = X509()
     certificate.set_pubkey(pkey_public_key)
 
     signature_header = request.headers['Signature']
-    signature = base64.b64decode(signature)
+    signature = base64.b64decode(signature_header)
 
     if not verify(certificate, signature, request.forms.payload, str('sha1')):
         logger.warn('invalid signature on travis webhook')

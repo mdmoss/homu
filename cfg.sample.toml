@@ -102,6 +102,9 @@ secret = ""
 #
 ## found under <https://travis-ci.org/profile/info>.
 #token = ""
+#
+## Travis url, mainly for switching .org and .com
+#url = "https://api.travis-ci.org"
 
 ## Use the Status API
 #[repo.NAME.status.LABEL]
